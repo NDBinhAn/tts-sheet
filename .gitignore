@@ -1,0 +1,14 @@
+# Dependencies
+/node_modules
+
+# Environment variables
+.env
+
+# Service account credentials
+config/google_service_account.json
+
+# State file
+config/sync_state.json
+
+# Log files
+*.log

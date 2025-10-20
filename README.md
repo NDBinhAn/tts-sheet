@@ -1,166 +1,163 @@
-## 💻 PROMPT CHO AGENT LẬP TRÌNH NODE.JS
+# Hướng Dẫn Cài Đặt và Sử Dụng Ứng Dụng Đồng Bộ Đơn Hàng TikTok-Sheet
 
-**Mục tiêu:** Xây dựng một ứng dụng Node.js để đồng bộ đơn hàng TikTok Shop sang Google Sheets, chạy theo cơ chế định kỳ (Cron Job) trên máy tính local.
+Chào mừng bạn! Đây là ứng dụng giúp tự động sao chép đơn hàng mới từ TikTok Shop của bạn vào một trang Google Sheets. Ứng dụng được thiết kế để chạy trên máy tính cá nhân của bạn (Windows, macOS, Linux) và sẽ kiểm tra đơn hàng mới mỗi 15 phút.
 
-### 1\. Yêu cầu Hệ thống và Công nghệ
+Tài liệu này sẽ hướng dẫn bạn từng bước, kể cả khi bạn không phải là người am hiểu về lập trình.
 
-  * **Ngôn ngữ/Nền tảng:** Node.js (phiên bản LTS).
-  * **Thư viện đề xuất:**
-      * **HTTP Requests:** `axios` (hoặc `node-fetch`).
-      * **Lên lịch:** `node-cron` (hoặc thư viện tương đương).
-      * **Google Sheets API:** `googleapis` (để tương tác với Sheets).
-      * **Quản lý Cấu hình:** `dotenv`.
-      * **Logging:** `winston` (để ghi log chi tiết).
-  * **Cơ chế lưu trữ:** Sử dụng file **JSON cục bộ** để lưu trữ `access_token`, `refresh_token`, và `last_synced_order_timestamp` (hoặc `last_synced_cursor`).
+## Mục lục
 
-### 2\. Luồng Logic Chính (Flow)
+1.  [Yêu cầu Hệ thống](#1-yêu-cầu-hệ-thống)
+2.  [Hướng dẫn Cài đặt Chi tiết](#2-hướng-dẫn-cài-đặt-chi-tiết)
+    *   [Bước 1: Cài đặt Node.js](#bước-1-cài-đặt-nodejs)
+    *   [Bước 2: Tải ứng dụng về máy tính](#bước-2-tải-ứng-dụng-về-máy-tính)
+3.  [Hướng dẫn Cấu hình](#3-hướng-dẫn-cấu-hình)
+    *   [Bước 3: Cấu hình Google Sheets](#bước-3-cấu-hình-google-sheets)
+    *   [Bước 4: Cấu hình TikTok Shop](#bước-4-cấu-hình-tiktok-shop)
+    *   [Bước 5: Điền thông tin vào tệp cấu hình](#bước-5-điền-thông-tin-vào-tệp-cấu-hình)
+4.  [Vận hành Ứng dụng](#4-vận-hành-ứng-dụng)
+5.  [Câu hỏi Thường gặp (FAQ)](#5-câu-hỏi-thường-gặp-faq)
 
-Ứng dụng phải thực hiện tuần tự các bước sau mỗi khi được kích hoạt:
+---
 
-1.  **Khởi tạo & Kiểm tra Token:**
-      * Đọc thông tin `access_token`, `refresh_token`, và `last_synced_timestamp` từ file cấu hình/lưu trữ cục bộ.
-      * Kiểm tra tính hợp lệ của `access_token`.
-2.  **Làm mới Token (Nếu cần):**
-      * Nếu `access_token` hết hạn hoặc không hợp lệ, sử dụng `refresh_token` để gọi API TikTok và nhận cặp `access_token`/`refresh_token` mới.
-      * **Lưu ngay lập tức** cặp token mới vào file lưu trữ cục bộ (`sync_state.json`).
-3.  **Đồng bộ Đơn hàng:**
-      * Gọi API TikTok Shop (`/order/list`) để lấy danh sách đơn hàng. **Phạm vi lấy:** Lấy **tất cả đơn hàng** có trạng thái thanh toán là **Đã thanh toán** (`PAID`) **và** có thời gian tạo đơn hàng (`create_time`) **lớn hơn** `last_synced_timestamp` gần nhất.
-      * Sử dụng **Pagination/Cursor** để lấy hết tất cả các đơn hàng mới (nếu có).
-4.  **Xử lý và Ghi dữ liệu:**
-      * Lọc bỏ các đơn hàng đã tồn tại (nếu cần thiết, dựa vào Order ID).
-      * Chuẩn hóa dữ liệu đơn hàng (ID, Sản phẩm, Khách hàng, Trạng thái) thành định dạng hàng (row) cho Google Sheet.
-      * Ghi các đơn hàng mới vào Google Sheet.
-5.  **Cập nhật Last Synced Timestamp:**
-      * Sau khi ghi thành công, cập nhật `last_synced_timestamp` trong file lưu trữ cục bộ (`sync_state.json`) bằng **thời gian tạo đơn hàng (create\_time) của đơn hàng mới nhất** được đồng bộ.
+### 1. Yêu cầu Hệ thống
 
-### 3\. Yêu cầu Chi tiết về Triển khai
+Để ứng dụng hoạt động, máy tính của bạn chỉ cần cài đặt một phần mềm duy nhất là **Node.js**.
 
-| Yêu cầu | Chi tiết Triển khai |
-| :--- | :--- |
-| **Khởi chạy Cron Job** | Sử dụng thư viện `node-cron`. Lịch chạy đề xuất: **mỗi 15 phút** (`*/15 * * * *`). |
-| **Chạy ngay khi Application Run** | Hàm đồng bộ chính (`syncOrdersAndSaveToSheet()`) phải được gọi **một lần duy nhất** ngay sau khi ứng dụng khởi động thành công (trong `app.js`). |
-| **Quản lý Token** | Module `tiktokService.js` phải chứa logic `refreshAccessToken()` và logic tự động lưu token mới vào file `token.json` khi có sự thay đổi. |
-| **Lưu trữ Trạng thái** | File **`config/sync_state.json`** được dùng để lưu trữ: `{ "access_token": "...", "refresh_token": "...", "last_synced_timestamp": 1678886400 }` (Timestamp là Unix Time - giây). |
-| **Google Sheets** | Ứng dụng phải sử dụng **Service Account** để ủy quyền truy cập Google Sheets, không dùng Oauth2 flow của người dùng. |
-| **Xử lý Đơn hàng đã Tắt Server** | Logic `syncOrdersAndSaveToSheet()` phải luôn sử dụng `last_synced_timestamp` để đảm bảo không bỏ sót bất kỳ đơn hàng nào phát sinh khi server tắt.
+-   **Node.js là gì?** Hiểu đơn giản, đây là môi trường cần thiết để chạy mã nguồn của ứng dụng này, giống như bạn cần Microsoft Word để mở tệp `.docx`.
 
------
+---
 
-## 📄 README.md (Hướng dẫn sử dụng và Quản lý Code)
+### 2. Hướng dẫn Cài đặt Chi tiết
 
-Tên Project: **tiktok-sheet-sync**
+#### Bước 1: Cài đặt Node.js
 
-### Mục lục
+1.  Truy cập trang web chính thức của Node.js: [https://nodejs.org/](https://nodejs.org/)
+2.  Bạn sẽ thấy hai phiên bản để tải. Hãy chọn phiên bản **LTS** (Recommended For Most Users).
+    ![Download Node.js](https://i.imgur.com/a0dJeda.png)
+3.  Sau khi tải về, mở tệp và tiến hành cài đặt. Bạn chỉ cần nhấn **Next** liên tục cho đến khi hoàn tất.
+4.  **Kiểm tra cài đặt thành công:**
+    *   **Windows:** Mở **Command Prompt** bằng cách nhấn phím `Windows` + `R`, gõ `cmd` và nhấn Enter.
+    *   **macOS:** Mở **Terminal** bằng cách nhấn `Cmd` + `Space`, gõ `Terminal` và nhấn Enter.
+    *   Trong cửa sổ vừa mở, gõ lệnh sau và nhấn Enter:
+        ```bash
+        node -v
+        ```
+    *   Nếu bạn thấy một dòng chữ hiện ra phiên bản (ví dụ: `v20.11.1`), bạn đã cài đặt thành công!
 
-1.  [Giới thiệu](https://www.google.com/search?q=%231-gi%E1%BB%9Bi-thi%E1%BB%87u)
-2.  [Cấu trúc Project](https://www.google.com/search?q=%232-c%E1%BA%A5u-tr%C3%BAc-project)
-3.  [Cài đặt và Cấu hình](https://www.google.com/search?q=%233-c%C3%A0i-%C4%91%E1%BA%B7t-v%C3%A0-c%E1%BA%A5u-h%C3%ACnh)
-4.  [Cách Vận hành](https://www.google.com/search?q=%234-c%C3%A1ch-v%E1%BA%ADn-h%C3%A0nh)
-5.  [Logic Đồng bộ](https://www.google.com/search?q=%235-logic-%C4%91%E1%BB%93ng-b%E1%BB%99)
+#### Bước 2: Tải ứng dụng về máy tính
 
------
+1.  Tải mã nguồn của ứng dụng dưới dạng tệp ZIP.
+2.  Giải nén tệp ZIP này vào một thư mục dễ nhớ (ví dụ: `Desktop/tiktok-app`).
+3.  **Cài đặt các thư viện cần thiết:**
+    *   Mở lại Command Prompt (Windows) hoặc Terminal (macOS).
+    *   Sử dụng lệnh `cd` để di chuyển vào thư mục bạn vừa giải nén. Ví dụ:
+        ```bash
+        # Nếu bạn lưu ở Desktop
+        cd Desktop/tiktok-sheet-sync
+        ```
+    *   Sau khi đã ở đúng thư mục, gõ lệnh sau và nhấn Enter:
+        ```bash
+        npm install
+        ```
+    *   Lệnh này sẽ tự động tải các thư viện cần thiết cho ứng dụng. Quá trình này có thể mất vài phút.
 
-### 1\. Giới thiệu
+---
 
-Project **tiktok-sheet-sync** là một ứng dụng Node.js được thiết kế để đồng bộ đơn hàng mới từ TikTok Shop sang Google Sheets theo chu kỳ định kỳ (Cron Job). Ứng dụng được tối ưu hóa để chạy trên môi trường local, đảm bảo không bỏ sót đơn hàng ngay cả khi server bị tắt.
+### 3. Hướng dẫn Cấu hình
 
-**Phiên bản API sử dụng:** TikTok Shop Open API (Sử dụng phiên bản API mới nhất, ví dụ: $202403$).
+Đây là bước quan trọng nhất. Bạn cần lấy một vài thông tin từ Google và TikTok để ứng dụng có thể kết nối.
 
------
+#### Bước 3: Cấu hình Google Sheets
 
-### 2\. Cấu trúc Project
+Ứng dụng sẽ dùng một "tài khoản robot" (Service Account) để tự động ghi dữ liệu vào Google Sheet của bạn.
 
-```
-tiktok-sheet-sync/
-├── config/
-│   ├── config.env              # Thông tin API key, Sheet ID
-│   ├── google_service_account.json # Credentials Service Account Google
-│   └── sync_state.json         # LƯU TRỮ TRẠNG THÁI: access_token, refresh_token, last_synced_timestamp
-├── node_modules/
-├── src/
-│   ├── services/
-│   │   ├── tiktokService.js    # Logic gọi API TikTok và làm mới token (Refresh Token)
-│   │   └── googleSheetService.js # Logic ghi/đọc dữ liệu từ Google Sheets
-│   ├── utils/
-│   │   └── logger.js           # Cấu hình logging
-│   ├── app.js                  # Điểm khởi chạy ứng dụng, khởi tạo Cron Job
-│   └── syncEngine.js           # LOGIC CHÍNH: Chứa hàm đồng bộ (fetch -> process -> save)
-├── .gitignore
-├── package.json
-└── README.md
-```
+1.  **Tạo một trang Google Sheet mới:**
+    *   Truy cập [https://sheets.new](https://sheets.new).
+    *   Đặt tên cho trang tính và tạo các cột tiêu đề, ví dụ: `Order ID`, `Create Time`, `Payment Method`, `Total Amount`, `Buyer Username`.
 
------
+2.  **Tạo Tài khoản Dịch vụ (Service Account):**
+    *   Truy cập [Google Cloud Console](https://console.cloud.google.com/).
+    *   Tạo một dự án mới (nếu bạn chưa có).
+    *   Trên thanh tìm kiếm ở trên cùng, gõ **"Google Sheets API"** và bật nó lên (Enable).
+    *   Vào menu bên trái, chọn **IAM & Admin** -> **Service Accounts**.
+    *   Nhấn **+ CREATE SERVICE ACCOUNT**, đặt tên (ví dụ: `tiktok-sync-bot`) và nhấn **Create and Continue**, sau đó nhấn **Done**.
+    *   Bạn sẽ thấy tài khoản vừa tạo trong danh sách. Nhấn vào email của tài khoản đó.
+    *   Chuyển qua tab **KEYS**, chọn **ADD KEY** -> **Create new key**.
+    *   Chọn định dạng là **JSON** và nhấn **CREATE**. Một tệp `.json` sẽ tự động được tải về.
 
-### 3\. Cài đặt và Cấu hình
+3.  **Hoàn tất cấu hình Google:**
+    *   Đổi tên tệp `.json` vừa tải về thành `google_service_account.json`.
+    *   Di chuyển tệp này vào thư mục `config` bên trong thư mục ứng dụng của bạn.
+    *   Mở tệp `google_service_account.json` bằng một trình soạn thảo văn bản (Notepad, TextEdit), tìm và sao chép địa chỉ email trong dòng `"client_email"`.
+    *   Quay lại trang Google Sheet của bạn, nhấn nút **Share** (Chia sẻ) ở góc trên bên phải.
+    *   Dán địa chỉ email robot vào và cấp cho nó quyền **Editor**.
 
-#### 3.1. Cài đặt Phụ thuộc
+#### Bước 4: Cấu hình TikTok Shop
 
-```bash
-npm install axios node-cron dotenv googleapis winston
-```
+1.  Truy cập [TikTok Shop Seller Center](https://seller-vn.tiktok.com/).
+2.  Đi đến mục **App & Service Store** -> **Developer Center**.
+3.  Tạo một ứng dụng mới (Create New App).
+4.  Sau khi tạo, bạn sẽ nhận được **App Key** và **App Secret**. Hãy sao chép chúng lại.
+5.  Bạn cũng cần **Shop ID** của cửa hàng mình.
+6.  **Quan trọng:** Ứng dụng cần một cặp `access_token` và `refresh_token` ban đầu. Cặp token này phải được lấy thông qua quy trình ủy quyền của TikTok. Bước này hơi phức tạp và nằm ngoài phạm vi của ứng dụng. Bạn có thể cần nhờ một người có kinh nghiệm kỹ thuật để lấy cặp token này lần đầu tiên.
 
-#### 3.2. Cấu hình Tài khoản (config.env)
+#### Bước 5: Điền thông tin vào tệp cấu hình
 
-Tạo file `.env` (thay vì `config.env` để tương thích với `dotenv`) và điền thông tin:
+Bây giờ, hãy điền tất cả thông tin bạn đã thu thập vào các tệp cấu hình.
 
-```env
-# TikTok Shop API Credentials
-TIKTOK_APP_KEY=your_tiktok_app_key
-TIKTOK_APP_SECRET=your_tiktok_app_secret
-TIKTOK_SHOP_ID=your_tiktok_shop_id
-# TikTok API Endpoint (Đảm bảo dùng API mới nhất)
-TIKTOK_OAUTH_TOKEN_URL=https://auth-api.tiktok.com/oauth/token/
-TIKTOK_ORDER_LIST_URL=https://api.tiktok.com/order/list/
+1.  **Cấu hình tệp `.env`:**
+    *   Trong thư mục gốc của ứng dụng, tìm và mở tệp `.env` bằng Notepad hoặc TextEdit.
+    *   Điền các thông tin bạn đã lấy:
+        ```env
+        TIKTOK_APP_KEY=dán_app_key_của_bạn_vào_đây
+        TIKTOK_APP_SECRET=dán_app_secret_của_bạn_vào_đây
+        TIKTOK_SHOP_ID=dán_shop_id_của_bạn_vào_đây
 
-# Google Sheets Config
-GOOGLE_SHEET_ID=your_google_sheet_id
-GOOGLE_SHEET_RANGE=Sheet1!A:Z
-```
+        # Lấy từ URL của trang Google Sheet
+        # Ví dụ: https://docs.google.com/spreadsheets/d/ABCDEFG12345/edit
+        # ID chính là "ABCDEFG12345"
+        GOOGLE_SHEET_ID=dán_id_của_sheet_vào_đây
 
-#### 3.3. Cấu hình Google Sheets Service Account
+        # Tên trang tính và dải ô bạn muốn ghi
+        GOOGLE_SHEET_RANGE=Sheet1!A:Z
+        ```
+    *   Lưu tệp lại.
 
-1.  Tạo **Service Account** trên Google Cloud Console và tải file JSON.
-2.  Lưu file JSON đó vào thư mục `config/` với tên là `google_service_account.json`.
-3.  **Quan trọng:** Chia sẻ Google Sheet của bạn với **email** của Service Account này.
+2.  **Cấu hình tệp `sync_state.json`:**
+    *   Mở tệp `config/sync_state.json`.
+    *   Thay thế `YOUR_INITIAL_ACCESS_TOKEN` và `YOUR_INITIAL_REFRESH_TOKEN` bằng cặp token bạn đã lấy ở Bước 4.
+    *   Lưu tệp lại.
 
-#### 3.4. Cấu hình Trạng thái (sync\_state.json)
+---
 
-Tạo file `config/sync_state.json` với cấu trúc khởi tạo ban đầu:
+### 4. Vận hành Ứng dụng
 
-```json
-{
-  "access_token": "YOUR_INITIAL_ACCESS_TOKEN",
-  "refresh_token": "YOUR_INITIAL_REFRESH_TOKEN",
-  "last_synced_timestamp": 0
-}
-```
+Sau khi đã hoàn tất cài đặt và cấu hình, bạn đã sẵn sàng để chạy ứng dụng!
 
-*Lưu ý: `access_token` và `refresh_token` ban đầu phải được lấy thủ công qua OAuth một lần.*
-
------
-
-### 4\. Cách Vận hành
-
-1.  **Chạy ứng dụng:**
+1.  Mở Command Prompt (Windows) hoặc Terminal (macOS).
+2.  Di chuyển vào thư mục của ứng dụng bằng lệnh `cd`.
+3.  Chạy lệnh sau:
     ```bash
     node src/app.js
     ```
-2.  **Khởi chạy (Run-on-Start):** Ứng dụng sẽ tự động gọi hàm đồng bộ chính (`syncOrdersAndSaveToSheet()`) ngay lập tức khi khởi động.
-3.  **Lập lịch:** Sau khi khởi chạy, Cron Job sẽ chạy theo lịch $*/15 * * * *$ (mỗi $15$ phút) để duy trì đồng bộ.
+4.  Ứng dụng sẽ chạy lần đầu tiên để đồng bộ các đơn hàng cũ (nếu có). Sau đó, nó sẽ tự động lên lịch để chạy lại sau mỗi 15 phút.
 
------
+**Lưu ý quan trọng:** Cửa sổ Command Prompt/Terminal **phải được giữ mở** để ứng dụng tiếp tục chạy. Nếu bạn đóng cửa sổ này, quá trình tự động đồng bộ sẽ dừng lại.
 
-### 5\. Logic Đồng bộ
+---
 
-#### 5.1. Cơ chế Token
+### 5. Câu hỏi Thường gặp (FAQ)
 
-  * `tiktokService.js` kiểm tra nếu `access_token` hết hạn (hoặc lỗi $401$ khi gọi API).
-  * Nếu hết hạn, nó gọi API làm mới (`refresh_token`) để lấy token mới.
-  * Cặp token mới sẽ được **ghi đè ngay lập tức** vào `config/sync_state.json` để đảm bảo token luôn được cập nhật cho lần chạy tiếp theo (kể cả khi server bị tắt).
+*   **Tôi đóng cửa sổ dòng lệnh thì sao?**
+    *   Ứng dụng sẽ ngừng hoạt động. Bạn cần mở lại và chạy lệnh `node src/app.js` để nó tiếp tục.
 
-#### 5.2. Cơ chế Đồng bộ Đơn hàng (Anti-Loss)
+*   **Làm sao để biết ứng dụng có đang chạy đúng không?**
+    *   Kiểm tra Google Sheet của bạn, các đơn hàng mới sẽ xuất hiện sau một vài phút.
+    *   Bạn cũng có thể xem các tệp `combined.log` và `error.log` trong thư mục ứng dụng để xem nhật ký hoạt động chi tiết.
 
-  * **Filter Cơ sở:** Ứng dụng luôn gọi API đơn hàng với tham số `create_time` **lớn hơn** `last_synced_timestamp` đã lưu.
-  * **Xử lý Pagination:** Ứng dụng phải lặp (loop) qua tất cả các trang/cursor cho đến khi hết dữ liệu, đảm bảo lấy toàn bộ đơn hàng mới phát sinh trong khoảng thời gian server tắt.
-  * **Cập nhật Trạng thái:** Sau khi **tất cả** đơn hàng mới được ghi thành công lên Google Sheets, `last_synced_timestamp` sẽ được cập nhật bằng **thời gian tạo đơn hàng (create\_time)** mới nhất trong lô dữ liệu vừa đồng bộ.
+*   **Ứng dụng báo lỗi "Thiếu biến môi trường"?**
+    *   Hãy kiểm tra lại tệp `.env` và đảm bảo bạn đã điền đầy đủ và lưu lại tệp.
+
+*   **Dữ liệu không được ghi vào Google Sheet?**
+    *   Hãy chắc chắn rằng bạn đã chia sẻ Sheet với email của robot và cấp quyền **Editor**.
+    *   Kiểm tra lại `GOOGLE_SHEET_ID` trong tệp `.env`.
